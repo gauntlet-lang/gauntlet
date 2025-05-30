@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>gauntlet_lang</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Types/Base.fs" />
+    <Compile Include="Types/Ast.fs" />
+    <Compile Include="Types/ResolvedAst.fs" />
+    <Compile Include="Globals.fs" />
+    <Compile Include="Utils/Misc.fs" />
+    <Compile Include="Utils/Ast.fs" />
+    <Compile Include="Utils/Scope.fs" />
+    <Compile Include="Resolvers/BaseResolvers.fs" />
+    <Compile Include="Resolvers/ScopeResolver.fs" />
+    <Compile Include="Resolvers/ToplevelResolver.fs" />
+    <Compile Include="Transpilers/BaseTranspilers.fs" />
+    <Compile Include="Transpilers/ScopeTranspilers.fs" />
+    <Compile Include="Transpilers/ToplevelDeclarationTranspilers.fs" />
+    <Compile Include="Parsers/BaseParsers.fs" />
+    <Compile Include="Parsers/TypeParsers.fs" />
+    <Compile Include="Parsers/ExpressionParsers.fs" />
+    <Compile Include="Parsers/DeclarationParsers.fs" />
+    <Compile Include="Parsers/StatementParsers.fs" />
+    <Compile Include="Parsers/ConstructParsers.fs" />
+    <Compile Include="Test.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FParsec-Big-Data-Edition" Version="1.1.1" />
+    <PackageReference Include="FsToolkit.ErrorHandling" Version="4.18.0" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+</Project>
