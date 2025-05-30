@@ -13,7 +13,10 @@ Full documentation for the language, including several examples, can be found [h
 # Contributing
 Contributions would be greatly appreciated. Check out the [contributor's guide](CONTRIBUTING.md).
 
+---
+
 # Gauntlet Example
+
 ```fs
 package main
 
@@ -43,7 +46,6 @@ export fun ([]String, Error) getTrimmedFileLines(String fileName) {
     
 }
 
----
 
 fun Unit main() {
   let a = 1 // No unused variable errors
