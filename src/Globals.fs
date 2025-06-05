@@ -68,11 +68,4 @@ let random = System.Random()
 // to be used
 let randomNumbers = [ 0..50 ] |> List.map (fun _ -> random.Next(1000, 100000))
 
-let commandUsage = "
-Usage: gauntlet [run] <fileName>.gaunt
-
-Where:
-    run - Optional keyword that runs your transpiled Go code
-    fileName - File name of Gauntlet file you'd like to transpile 
-"
 
