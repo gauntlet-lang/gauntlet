@@ -264,3 +264,8 @@ let getFullFilePath (splitter:string) (relativePath:string) (currentDir:string) 
 
 let differenceOfTwoLists (a:'T list) (b:'T list) = 
     List.ofSeq <| Set.difference (Set.ofList a) (Set.ofList b)
+
+let failIfNone (err:string) (opt:'T option) = 
+    match opt with
+    | Some x -> x
+    | None -> failwith err

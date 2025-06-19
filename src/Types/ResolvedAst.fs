@@ -59,7 +59,6 @@ and WrapperTypeTypeData = {WrapperTypeName : string; ExportedStatus: ExportedSta
 and QualifiedTypeData = {ModuleName : string; TypeName: string}
 
 and GenericsInstantiationData = ResolvedType list
-//and TypeNameWithGenericsInstantiationData = string * GenericsInstantiationData
 
 and MapTypeData = {KeyType: ResolvedType; ValueType: ResolvedType}
 
@@ -136,12 +135,35 @@ and Expression =
     | NegatedExpression of NegatedExpressionData
     | TypeConversion of TypeConversionData 
     | UnaryOperator of UnaryOperatorData
+    | PatternMatch of PatternMatchData
     | ModuleAccessor of ModuleAccessorDataExprArgs
-    // TODO: Rename to module identifier
     | ModuleReference of ModuleReferenceData
     | Char of char
-    | EnumCaseLiteral of EnumCaseLiteralData
+    | EnumCaseLiteral of ExprEnumCaseLiteralData
     | Unit
+
+and PatternMatchData = {
+    MatchExpr: Expression;
+    Cases: {|Pattern: MatchingPattern; Scope: ScopeData|} list
+    }
+
+
+and MatchingPattern = 
+    | Number of NumberData 
+    | Float of FloatData 
+    | String of StringData 
+    | Boolean of BooleanData
+    | Destructure of IdentifierName
+    | Char of char
+    //| ArrayLiteral of ArrayLiteralData
+    //| SliceLiteral of SliceLiteralData
+    | EnumCaseLiteral of PatternEnumCaseLiteralData
+
+
+and PatternEnumCaseLiteralData = {
+    Name : string
+    CaseId : int
+    Fields : {|Name : string; Value : MatchingPattern|} list}
 
 and ConstantIdentifierData = {
     Identifier : string
@@ -369,6 +391,7 @@ and ScopeVariables = private {
                 match scopedVariable with
                 | ExprVariable({Name = name})
                 | ZeroVariable({Name = name})
+                | DestructuredVariable({Name = name})
                 | ParameterVariable({Name = name}) -> name
             this.Variables <- this.Variables.Add(variableName, scopedVariable)
         
@@ -408,12 +431,14 @@ and ScopedVariable =
     | ExprVariable of ExprVariableData
     | ZeroVariable of ZeroVariableData
     | ParameterVariable of ParameterVariableData 
+    | DestructuredVariable of DestructuredVariableData
     
     member this.GetName() = 
         match this with
         | ScopedVariable.ExprVariable(data) -> data.Name
         | ScopedVariable.ParameterVariable(data) -> data.Name
         | ScopedVariable.ZeroVariable(data) -> data.Name 
+        | ScopedVariable.DestructuredVariable(data) -> data.Name
     
 
 // Finally change the name 
@@ -428,6 +453,10 @@ and ZeroVariableData =
 and ParameterVariableData =
     { Name: string
       HasEllipsis : bool
+      Type: ResolvedType }
+
+and DestructuredVariableData =
+    { Name: string
       Type: ResolvedType }
 
 and ScopeData =
@@ -494,22 +523,18 @@ and Member =
     | InterfaceMethod of Declaration: MethodFieldData 
     | Method of Declaration: MethodDeclarationDataWithoutScopeData
     | StructField of Declaration: StructFieldDeclarationData
-//    | MemberDerivedFromModule of AttributeName : string 
 
 // I think the diff is AccessorItem represents the caller (hence why it has the callData) and the other 
 // represents the "declaration" of the member
 
 and AccessorItemExprArgs =
-    // | WrapperType of WrapperTypeReference
     | StructDeclaration of StructReference
     | InterfaceDeclaration of InterfaceReference
     | InterfaceMethod of Declaration: MethodFieldData * GenericsInstantiation: GenericsInstantiationData option * Arguments : ExpressionCallArguments option
     | Method of Declaration: MethodDeclarationDataWithoutScopeData * GenericsInstantiation: GenericsInstantiationData option * Arguments : ExpressionCallArguments option
     | StructField of Declaration: StructFieldDeclarationData * GenericsInstantiation: GenericsInstantiationData option * Arguments : ExpressionCallArguments option
-//    | ItemDerivedFromModule of Name:string * CallData: ('T AccessorCallData) option
 
 and AccessorItemPipeArgs =
-    // | WrapperType of WrapperTypeReference
     | StructDeclaration of StructReference
     | InterfaceDeclaration of InterfaceReference
     | InterfaceMethod of Declaration: MethodFieldData * GenericsInstantiation : GenericsInstantiationData option * Arguments : PipeCallArguments 
@@ -524,7 +549,7 @@ and PipeArgsAccessorsData =
     { BaseExpression: Expression
       Accessors: AccessorItemPipeArgs list }
 
-and PipeCall = // TODO
+and PipeCall = 
     | FunctionCall of FunctionPipeCallData
     | AccessorCall of PipeArgsAccessorsData
     | ModuleAccessorCall of ModuleAccessorDataPipeArgs
@@ -534,10 +559,6 @@ and ImportDeclarationData =
     { ModuleName: string
       IdentifierName: string }
 
-// Only thing we have to go off of is the AttributeName
-(* and DerivedFromModuleTypeData = {
-    AttributeName: string
-} *)
 
 and AliasDeclarationData =
     { ExportedStatus: ExportedStatus
@@ -687,11 +708,13 @@ and TypeConversionData =
     { Type: ResolvedType
       Expression: Expression }
 
-and EnumCaseLiteralData = {
+and ExprEnumCaseLiteralData = {
         CaseName : string
         CaseId : int
         Fields : {|Name : string; Value : Expression|} list
     }
+
+
 
 and UnaryOperatorData =
     { BaseExpression: Expression
@@ -831,8 +854,6 @@ type ToplevelDeclaration =
 
 
 
-
-
 type AttributeData = 
     {
         Name : string
@@ -844,26 +865,13 @@ type AttributeDeclaration =
     | Attribute of AttributeData list
 
 
-
-
 type AccessorSupportedType = 
     | StructType of StructTypeData
     | InterfaceType of InterfaceTypeData
     | WrapperType of WrapperTypeTypeData
-//    | DerivedFromModuleType of DerivedFromModuleTypeData
 
 
 
 
-(* type ResolvedASTData =
-    { Functions: FunctionData list
-      Structs: StructData list
-      Interfaces: InterfaceData list
-      WrapperTypes: WrapperTypeData list
-      Consts: IdentifierData list // These are also the toplevel vars
-      BuiltInFunctions: BuiltInFunctionData list
-      Imported: ImportData list
-      Aliases: AliasData list
-      (* Attributes: AttributeData list  *)} *)
 
 

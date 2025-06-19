@@ -33,30 +33,30 @@ let constParser =
 
 let (normalVarDeclaration: Parser<Ast.NonToplevelDeclaration>) =
     pipe4
-        (pstr "let" >>. spaces1 >>. maybeFn (typeParser .>> spaces1) Some None)
+        (pstr "let" >.< spaces1)
         (variableDeclarationPattern .>> spaces)
-        (pchar '=' .>> sep)
-        expressionParser
-        (fun t' varName _ f -> Ast.NormalVar(t', varName, f))
+        (maybeFn (pchar ':' .>> spaces >>. typeParser .>> spaces) Some None)
+        (pchar '=' >>. sep >>. expressionParser)
+        (fun _ varName t' f -> Ast.NormalVar(t', varName, f))
     <??> "Variable declaration"
 
 let (zeroVarDeclaration: Parser<Ast.NonToplevelDeclaration>) =
     pipe3
         (pstr "zero" >.< spaces1)
-        (typeParser .>> spaces1)
-        (variableDeclarationPattern)
-        (fun _ typ varName -> Ast.ZeroVar(varName, typ))
+        (variableDeclarationPattern .>> spaces .>> pchar ':' .>> spaces)
+        (typeParser)
+        (fun _ varName typ -> Ast.ZeroVar(varName, typ))
     <??> "Zero variable declaration"
 
 let (functionDeclaration: Parser<ExportedStatus -> Ast.ToplevelDeclaration>) =
     pipe5
-        (pstr "fun" >>. spaces1 >>. typeParser .>> spaces1)
+        (pstr "fun" .>> spaces1)
         (camelCase .>>. (spaces >>. tryParse generics [] .>> spaces))
-        ((pchar '(' >>. (sepBy functParam (pstr "," >.< spaces)) .>> pchar ')')
+        ((pchar '(' >>. spaces >>. (sepBy functParam (pstr "," >.< spaces)) .>> spaces .>> pchar ')'.>> spaces )
          <??> "Return type annotation")
-        spaces1
+        (pchar ':' >>. spaces >>. typeParser .>> spaces)
         constructsBetweenBraces
-        (fun returnType (funName, generics) parameters _ contents ->
+        (fun _ (funName, generics) parameters returnType contents ->
             fun isExported ->
                 Ast.Function(isExported, funName, generics, parameters, returnType, (contents, newRandomNumber ())))
 
@@ -64,11 +64,11 @@ let (functionDeclaration: Parser<ExportedStatus -> Ast.ToplevelDeclaration>) =
 
 let (methodDeclaration: Parser<ExportedStatus -> Ast.ToplevelDeclaration>) =
     pipe4
-        ((pstr "def" >>. spaces1 >>. typeParser) .>>. (spaces1 >>. camelCase .>> spaces .>> pchar '(' .>> spaces))
-        ((typeNameWithGenericsInstantiationData (preturn id)) .>>. (spaces1 >>. identifierNameParser .>> spaces))
-        ((tryParse (pchar ',' >.< spaces) ()) >>. sepBy functParam (pstr "," .>> spaces) .>> pchar ')' .>> spaces)
-        constructsBetweenBraces
-        (fun (returnType, name) (receiver, receiverParameterName) parameters contents ->
+        (pstr "def" >>. (spaces1 >>. camelCase .>> spaces .>> pchar '(' .>> spaces))
+        ((identifierNameParser .>> spaces .>> pchar ':' .>> spaces) .>>. typeNameWithGenericsInstantiationData (preturn id))
+        ((tryParse (pchar ',' >.< spaces) ()) >>. sepBy functParam (pstr "," .>> spaces) .>> pchar ')' .>> spaces .>> pchar ':' .>> spaces)
+        ((typeParser .>> sep) .>>. constructsBetweenBraces)
+        (fun name (receiverParameterName, receiver) parameters (returnType, contents) ->
             fun exportStatus ->
                 Ast.ToplevelDeclaration.Method(
                     (exportStatus,
@@ -102,11 +102,6 @@ let importDeclaration =
 
 let interfaceDeclaration =
 
-    (* let typeUnion =
-        let typeTermParser =  .>>. typeParser 
-        (sepBy (typeTermParser .>> spaces) (pstr "|" >.< spaces))
-
- *)
     let (embeddedType: Parser<Ast.InterfaceConstruct>) =
         typeNameWithGenericsInstantiationData (preturn id)
         |>> Ast.InterfaceConstruct.Embedded
@@ -117,13 +112,12 @@ let interfaceDeclaration =
 
     let (interfaceMethod: Parser<ExportedStatus -> Ast.InterfaceConstruct>) =
         pipe4
-            (typeParser .>> spaces1)
             (camelCase .>> spaces)
             (pchar '(' >>. spaces >>. (sepEndBy functParam (pstr "," >.< spaces)) .>> spaces)
-            (pchar ')')
-            (fun t methodName parameters _ ->
+            (pchar ')' >.< spaces >.< pchar ':' >.< spaces)
+            (typeParser)
+            (fun methodName parameters _ t ->
                 fun isExported -> Ast.InterfaceConstruct.Method(isExported, methodName, parameters, t))
-
 
     pipe4
         (pstr "interface" >>. spaces)
@@ -132,7 +126,7 @@ let interfaceDeclaration =
          >>. spaces
          >>. newlines
          >>. sepByNewLines ((typeSet <|> attempt (maybeExport interfaceMethod)) <|> embeddedType)
-         .>> spaces)
+         .>> sep)
         (pchar '}')
         (fun _ (name, generics) lines _ -> fun isExported -> Ast.Interface(isExported, name, generics, lines))
 

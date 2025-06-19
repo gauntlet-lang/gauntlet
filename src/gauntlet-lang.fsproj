@@ -5,27 +5,26 @@
     <RootNamespace>gauntlet_lang</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="src/Types/Base.fs" />
-    <Compile Include="src/Types/Ast.fs" />
-    <Compile Include="src/Types/ResolvedAst.fs" />
-    <Compile Include="src/Globals.fs" />
-    <Compile Include="src/Utils/Misc.fs" />
-    <Compile Include="src/Utils/Ast.fs" />
-    <Compile Include="src/Utils/Scope.fs" />
-    <Compile Include="src/Resolvers/BaseResolvers.fs" />
-    <Compile Include="src/Resolvers/ScopeResolver.fs" />
-    <Compile Include="src/Resolvers/ToplevelResolver.fs" />
-    <Compile Include="src/Transpilers/BaseTranspilers.fs" />
-    <Compile Include="src/Transpilers/ScopeTranspilers.fs" />
-    <Compile Include="src/Transpilers/ToplevelDeclarationTranspilers.fs" />
-    <Compile Include="src/Parsers/BaseParsers.fs" />
-    <Compile Include="src/Parsers/TypeParsers.fs" />
-    <Compile Include="src/Parsers/ExpressionParsers.fs" />
-    <Compile Include="src/Parsers/DeclarationParsers.fs" />
-    <Compile Include="src/Parsers/StatementParsers.fs" />
-    <Compile Include="src/Parsers/ConstructParsers.fs" />
-    <Compile Include="src/Test.fs" />
-    <Compile Include="src/Program.fs" />
+    <Compile Include="Types/Base.fs" />
+    <Compile Include="Types/Ast.fs" />
+    <Compile Include="Types/ResolvedAst.fs" />
+    <Compile Include="Globals.fs" />
+    <Compile Include="Utils/Misc.fs" />
+    <Compile Include="Utils/Ast.fs" />
+    <Compile Include="Resolvers/BaseResolvers.fs" />
+    <Compile Include="Resolvers/ScopeResolver.fs" />
+    <Compile Include="Resolvers/ToplevelResolver.fs" />
+    <Compile Include="Transpilers/BaseTranspilers.fs" />
+    <Compile Include="Transpilers/ScopeTranspilers.fs" />
+    <Compile Include="Transpilers/ToplevelDeclarationTranspilers.fs" />
+    <Compile Include="Parsers/BaseParsers.fs" />
+    <Compile Include="Parsers/TypeParsers.fs" />
+    <Compile Include="Parsers/ExpressionParsers.fs" />
+    <Compile Include="Parsers/DeclarationParsers.fs" />
+    <Compile Include="Parsers/StatementParsers.fs" />
+    <Compile Include="Parsers/ConstructParsers.fs" />
+    <Compile Include="Test.fs" />
+    <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FParsec" Version="1.1.1" />

@@ -44,6 +44,7 @@ let rec transpileScope (input:ResolvedAst.ScopeData) : string =
         input.VariablesDefinedInThisScope
         |> List.filter (fun v ->
             match v with
+            | ResolvedAst.ScopedVariable.DestructuredVariable(_)
             | ResolvedAst.ScopedVariable.ParameterVariable (_) -> false // These don't count
             | ResolvedAst.ScopedVariable.ExprVariable(_)
             | ResolvedAst.ScopedVariable.ZeroVariable(_) -> true
@@ -67,22 +68,22 @@ and transpileExpression (input:ResolvedAst.Expression): string =
         transpileExprAccessors accessorsData    
     | ResolvedAst.Expression.ArrayLiteral(arrayLiteralData) ->
         transpileArrayLiteral arrayLiteralData
+    | ResolvedAst.Expression.PatternMatch(data) ->
+        transpilePatternMatch data
     | ResolvedAst.Expression.Boolean(b) ->
-        (string b.Value).ToLower()
-    | ResolvedAst.Expression.Char(c) -> "'" + string c + "'"
+        transpileBool b
+    | ResolvedAst.Expression.Char(c) -> transpileChar c
     | ResolvedAst.Expression.ChannelRecieve(channelRecieveData) ->
         $"<-{transpileExpression channelRecieveData.Expression}"
     | ResolvedAst.Expression.DereferenceOf(dereferenceOfData) ->
         $"&{dereferenceOfData.ReferenceIdentifier.GetName()}"
     | ResolvedAst.Expression.ConstantIdentifier(data) -> adjustName data.Reference.ExportedStatus data.Identifier
     | ResolvedAst.Expression.Float(floatData) ->
-        let suffix = if floatData.IsImaginary then "i" else ""
-        let prefix = if floatData.IsNegative then "-" else "" 
-        prefix + string floatData.Float + suffix
+        transpileFloat floatData
     | ResolvedAst.Expression.FunctionCall(functionCallData) ->
         transpileExprFunctionCall functionCallData
     | ResolvedAst.Expression.EnumCaseLiteral(data) ->
-        transpileEnumCaseLiteral data
+        transpileExprEnumCaseLiteral data
     | ResolvedAst.Expression.Index(indexData) -> transpileIndex indexData
     | ResolvedAst.Expression.Lambda(lambdaData) -> transpileLambda lambdaData
     | ResolvedAst.Expression.MakeFunction(makeFunctionData) ->
@@ -102,7 +103,7 @@ and transpileExpression (input:ResolvedAst.Expression): string =
     | ResolvedAst.Expression.Variable(scopedVariableData) -> transpileScopedVariable scopedVariableData
     | ResolvedAst.Expression.Slice(sliceData) -> transpileSlice sliceData
     | ResolvedAst.Expression.SliceLiteral(sliceLiteralData) -> transpileSliceLiteral sliceLiteralData
-    | ResolvedAst.Expression.String(str) -> if not (str.Contains("\n")) then "\"" + str + "\"" else "`" + str + "`"
+    | ResolvedAst.Expression.String(str) -> transpileString str
     | ResolvedAst.Expression.StructLiteral(structLiteralData) -> transpileStructLiteral structLiteralData
     | ResolvedAst.Expression.When(whenData) -> transpileWhen whenData
     | ResolvedAst.Expression.TernaryOperator(ternaryOperatorData) -> transpileTernaryOperator ternaryOperatorData
@@ -113,7 +114,114 @@ and transpileExpression (input:ResolvedAst.Expression): string =
     | ResolvedAst.Expression.Unit -> "()"
     | ResolvedAst.Expression.ModuleReference(d) -> d.ModuleIdentifier
 
-and transpileEnumCaseLiteral (input: ResolvedAst.EnumCaseLiteralData) = 
+and transpileBool (b:ResolvedAst.BooleanData) = 
+    (string b.Value).ToLower()
+
+and transpileChar (c:char) = 
+    "'" + string c + "'"
+
+and transpileString (input:ResolvedAst.StringData) = 
+    if not (input.Contains("\n")) then "\"" + input + "\"" else "`" + input + "`"
+
+and transpileFloat (floatData:ResolvedAst.FloatData) = 
+    let suffix = if floatData.IsImaginary then "i" else ""
+    let prefix = if floatData.IsNegative then "-" else "" 
+    prefix + string floatData.Float + suffix
+
+and transpilePatternEnumCaseLiteral (transpiledExprBeingMatched:string) (input:ResolvedAst.PatternEnumCaseLiteralData) = 
+    let mappedConditions = 
+        input.Fields
+        |> List.map (fun data ->
+            let castedCase = $"[{input.CaseId}].(Case{input.CaseId})"
+            let transpiledValue, _ = transpileMatchingPattern true transpiledExprBeingMatched data.Value
+            match data.Value with
+            | ResolvedAst.MatchingPattern.EnumCaseLiteral(_) ->
+                transpiledValue
+            | _ ->
+                transpiledExprBeingMatched + $"{castedCase}." + data.Name  + "==" + transpiledValue)
+        |> List.map (fun x -> "(" + x + ")")
+        |> String.concat "&&"
+    if mappedConditions.Length = 0 then
+        ""
+    else
+        "(func() bool { return " + mappedConditions + "})()"
+
+and getDeconstructedVarsFromPatternEnumCaseLiteral (input:ResolvedAst.PatternEnumCaseLiteralData) = 
+    let mutable fields = []
+    for field in input.Fields do
+        match field.Value with
+        | ResolvedAst.MatchingPattern.Destructure(ident) ->
+            fields <- Misc.listAdd fields (ident, field.Name, input.CaseId)
+        (* | ResolvedAst.MatchingPattern.ArrayLiteral(data) ->
+            () *)
+        | ResolvedAst.MatchingPattern.Boolean(b) ->
+            ()
+        | ResolvedAst.MatchingPattern.Char(c) ->
+            ()
+        | ResolvedAst.MatchingPattern.Float(data) ->
+            ()
+        | ResolvedAst.MatchingPattern.Number(num) ->
+            ()
+        (* | ResolvedAst.MatchingPattern.SliceLiteral(data) ->
+            () *)
+        | ResolvedAst.MatchingPattern.String(data) -> ()
+        | ResolvedAst.MatchingPattern.EnumCaseLiteral(data) ->
+            fields <- List.append fields (getDeconstructedVarsFromPatternEnumCaseLiteral data)
+    fields
+        
+    
+
+and transpileMatchingPattern (ignorePrefix:bool) (transpiledExprBeingMatched:string) (input:ResolvedAst.MatchingPattern) = 
+    let prefix = if ignorePrefix then "" else transpiledExprBeingMatched + "=="
+    match input with
+    (* | ResolvedAst.MatchingPattern.ArrayLiteral(data) ->
+        prefix + transpileArrayLiteral data, [] *)
+    | ResolvedAst.MatchingPattern.Boolean(b) ->
+        prefix + transpileBool b, []
+    | ResolvedAst.MatchingPattern.Char(c) ->
+        prefix + transpileChar c, []
+    | ResolvedAst.MatchingPattern.Float(data) ->
+        prefix + transpileFloat data, []
+    | ResolvedAst.MatchingPattern.Destructure(ident) ->
+        ident, []
+    | ResolvedAst.MatchingPattern.Number(num) ->
+        prefix + transpileNumber num, []
+    (* | ResolvedAst.MatchingPattern.SliceLiteral(data) ->
+        prefix + transpileSliceLiteral data, [] *)
+    | ResolvedAst.MatchingPattern.String(data) -> prefix + transpileString data, []
+    | ResolvedAst.MatchingPattern.EnumCaseLiteral(data) ->
+        let x = getDeconstructedVarsFromPatternEnumCaseLiteral data
+        transpilePatternEnumCaseLiteral transpiledExprBeingMatched data, x
+    |> fun (result, destructuredVars) -> "(" + result + ")", destructuredVars
+
+
+and transpilePatternMatch (input:ResolvedAst.PatternMatchData) = 
+    let transpiledMatchExpr = transpileExpression input.MatchExpr
+    input.Cases
+    |> List.map (fun case ->
+        let transpiledCase = transpileScope case.Scope
+        let conditions, destructuredVars = transpileMatchingPattern false transpiledMatchExpr case.Pattern
+        let varNames = destructuredVars |> List.map (fun (n, _, _) -> n)
+        let varValues = destructuredVars |> List.map (fun (_, fieldName, caseId) -> $"{transpiledMatchExpr}[{caseId}].(Case{caseId}).{fieldName}")
+        let ifStatementBeginning = (String.concat ", "varNames) + ":=" + (String.concat ", " varValues)
+        let ifStatement =
+            if varNames.Length <> 0 then
+                "\nif " + ifStatementBeginning + "; " + conditions + "{\n" + transpiledCase + "\n}"
+            else
+                let modifiedConditions = if conditions.Trim() = "()" then "true" else conditions
+                $"if {modifiedConditions}" + "{\n" + transpiledCase + "\n}"
+        let getStatementSurrounding (innerIfStatement:string) = 
+            match case.Pattern with
+            | ResolvedAst.MatchingPattern.EnumCaseLiteral(data) ->
+                $"if _, exists := {transpiledMatchExpr}[{data.CaseId}]; exists " + "{\n " + innerIfStatement + "}"
+            | _ -> innerIfStatement
+        ifStatement
+        |> getStatementSurrounding
+    )
+    |> String.concat "\n"
+
+
+and transpileExprEnumCaseLiteral (input: ResolvedAst.ExprEnumCaseLiteralData) = 
     
     let mappedFields = 
         input.Fields
@@ -520,12 +628,6 @@ and transpilePipeFunctionCallArgumentAccessors (accessors:list<ResolvedAst.Acces
                 let transpiledGenericsInstantiation = Ast.transpileOptionalGenericsInstantiation genericsInstantiation'
                 let transpiledCallData = transpilePipeArguments args
                 Misc.adjustName data.ExportedStatus data.Name + transpiledGenericsInstantiation + transpiledCallData
-            (* | ResolvedAst.AccessorItem.ItemDerivedFromModule(Name = name; CallData = Some callData) ->
-                let transpiledGenericsInstantiation = Ast.transpileOptionalGenericsInstantiation callData.GenericsInstantiation
-                let transpiledCallData = transpileFunctionArguments callData.FunctionArguments
-                Misc.adjustName Base.ExportedStatus.Exported name + transpiledGenericsInstantiation + $"({transpiledCallData})"
-            | ResolvedAst.AccessorItem.ItemDerivedFromModule(Name = name; CallData = None) ->
-                Misc.adjustName Base.ExportedStatus.Exported name *)
         )
         |> List.rev
         |> String.concat "."

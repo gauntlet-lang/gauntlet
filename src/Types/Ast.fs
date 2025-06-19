@@ -81,7 +81,8 @@ and Expression =
     | NegatedExpression of NegatedExpressionData
     | TypeConversion of TypeConversionData
     | UnaryOperator of UnaryOperatorData
-    | EnumCaseLiteral of EnumCaseLiteralData
+    | EnumCaseLiteral of ExprEnumCaseLiteralData
+    | PatternMatch of PatternMatchData
     | Char of CharData
     | Unit
 
@@ -89,11 +90,22 @@ and NonToplevelDeclaration =
     | NormalVar of UnresolvedType option * VariablePattern * Expression
     | ZeroVar of VariablePattern * UnresolvedType
 
-// Remove GenericsInstantiationData
-// DID: Break FunctionCallArguments into two
+and MatchingPattern = 
+    | Number of NumberData 
+    | Float of FloatData 
+    | String of StringData 
+    | Destructure of IdentifierName
+    | Boolean of BooleanData
+    | Char of char
+    //| ArrayLiteral of ArrayLiteralData
+    //| SliceLiteral of SliceLiteralData
+    | EnumCaseLiteral of PatternEnumCaseLiteralData
+
+and PatternEnumCaseLiteralData = string * (string * MatchingPattern) list
+
 and ExpressionCallArguments = (Expression * HasEllipsis) list
+and PatternMatchData = Expression * (MatchingPattern * RawScopeData) list
 and PipeCallArguments = (PipeFunctionCallArgument * HasEllipsis) list
-// Break FunctionCallData into two
 and FunctionExprCallData = PossibleFunctionReference * GenericsInstantiationData option * ExpressionCallArguments
 and FunctionPipeCallData = PossibleFunctionReference * GenericsInstantiationData option * PipeCallArguments
 and OperatorSequenceData = Expression * (Operator * Expression) list
@@ -114,15 +126,13 @@ and SwitchCaseType =
     | ExpressionSwitch of ExpressionSwitchCaseData
     | TypeSwitch of TypeSwitchCaseData
 
-//and CompositeLiteralData = UnresolvedStructReference * Expression list
 and LambdaData = Parameter list * ReturnType * RawScopeData
 and TupleDChannelRecieveDataata = Expression list
 and TypeAssertionData = IdentifierName * UnresolvedType
 and MakeFunctionData = UnresolvedType * Expression list
-and EnumCaseLiteralData = string * (string * Expression) list
+and ExprEnumCaseLiteralData = string * (string * Expression) list
 and NewFunctionData = UnresolvedType
 and WrapperTypeLiteralData = TypeNameWithGenericsInstantiationData * Expression
-// DID: Split AccessorsData into two
 and ExprArgsAccessorsData = Expression * AccessorItemExprArgs list
 and PipeArgsAccessorsData = Expression * AccessorItemPipeArgs list
 
@@ -294,3 +304,4 @@ type ASTData =
 type GauntletFileData =
     { ModuleName: ModuleName
       ASTData: ASTData }
+

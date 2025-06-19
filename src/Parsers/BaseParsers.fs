@@ -186,8 +186,9 @@ let (identifier: Parser<string>) = camelCase
 let (generics: Parser<Generics>) =
     pchar '['
     >>. spaces
-    >>. (sepBy ((typeParser .>> spaces) .>>. pascalCase) (pchar ',' >.< spaces))
+    >>. (sepBy ((pascalCase .>> spaces .>> pchar ':' .>> spaces) .>>. typeParser) (pchar ',' >.< spaces))
     .>> pchar ']'
+    |>> fun r -> List.map (fun (n, t) -> t, n) r
     <??> "Generic parameters"
 
 let (genericsInstantiation: Parser<GenericsInstantiationData>) =
@@ -273,18 +274,21 @@ let constructsBetweenBraces =
 
 let (functParam: Parser<Parameter>) =
     pipe2
-        ((maybe ellipsisParser true false .>>. typeParser) .>> spaces1)
-        identifierNameParser
-        (fun (hasEllipsis, t) varName -> hasEllipsis, t, varName)
+        (identifierNameParser .>> spaces .>> pchar ':' .>> spaces)
+        (maybe ellipsisParser true false .>>. typeParser)
+        (fun varName (hasEllipsis, t) -> hasEllipsis, t, varName)
 
 
 let (structFieldDeclarationWithoutTag: Parser<ExportedStatus -> Ast.StructConstruct>) =
-    pipe2 (typeParser .>> spaces) pascalCase (fun t name ->
+    pipe2 (pascalCase .>> pchar ':' .>> spaces) typeParser (fun name t  ->
         fun exportStatus -> Ast.Field(exportStatus, (t, name), None))
 
 let (structFieldDeclarationWithTag: Parser<ExportedStatus -> Ast.StructConstruct>) =
-    pipe3 (typeParser .>> spaces) (pascalCase .>> spaces) (backtickStr <??> "Struct tag") (fun t name tag ->
+    pipe3 (pascalCase .>> spaces .>> pchar ':' .>> spaces) typeParser  (backtickStr <??> "Struct tag") (fun name t tag ->
         fun exportStatus -> Ast.Field(exportStatus, (t, name), Some tag))
 
 let (iota:Parser<_>) = 
     wordAlone "iota"
+
+let number = 
+    negativeInteger <|> attempt positiveInteger 

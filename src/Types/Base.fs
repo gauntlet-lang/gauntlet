@@ -70,8 +70,6 @@ type UnresolvedType = // Change name to just "Type" when refractoring is finishe
     // For built-in types, and custom ones
     //| NonBuiltInType of ModuleName option * TypeName * GenericsInstantiationData
     | SliceType of SliceTypeData
-    // Tommorow: Deal with the implications of the below change, as well as figure out how to continue with the left
-    //    | CustomType of UnresolvedTypeReference // Any type, such as a struct or interface, that is defined by the user
     | ImportedType of ModuleName * TypeName
     | ArrayType of ArrayTypeData
     | MapType of UnresolvedType * UnresolvedType

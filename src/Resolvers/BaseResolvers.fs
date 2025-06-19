@@ -171,8 +171,6 @@ let tryResolveGenericData
     (astData: Ast.ASTData)
     ((unresolvedType, genericTypeName): Base.GenericData as generics)
     : Result<ResolvedAst.GenericData, string list> =
-        // Putting [] since you can't contrain a generic type to another generic type.
-        // Therefore, the function does not need generic data
      tryResolveType astData [] unresolvedType
      |> Result.map (fun r ->
         {
@@ -225,6 +223,7 @@ let rec tryGetTypeFromExpression (declarations:ResolvedAst.ResolvedDeclarations)
     | ResolvedAst.ArrayLiteral(x) -> Ok x.ItemsType
     | ResolvedAst.Char(_) -> Ok <| ResolvedAst.ResolvedType.IntegerType(IntType.Int32Type)
     | ResolvedAst.EnumCaseLiteral(_) -> Ok ResolvedAst.ResolvedType.EnumType
+    | ResolvedAst.PatternMatch(data) -> Ok ResolvedAst.ResolvedType.UnitType
     | ResolvedAst.Boolean(_) -> ResolvedAst.ResolvedType.BooleanType |> Ok
     | ResolvedAst.ChannelRecieve(data) ->
         result {
@@ -331,6 +330,7 @@ and tryGetTypeFromVariable (declarations:ResolvedAst.ResolvedDeclarations) (inpu
     | ResolvedAst.ScopedVariable.ExprVariable({Expression = expr}) -> tryGetTypeFromExpression declarations expr
     | ResolvedAst.ScopedVariable.ParameterVariable({Type = t}) -> Ok t
     | ResolvedAst.ScopedVariable.ZeroVariable({Type = t}) -> Ok t
+    | ResolvedAst.ScopedVariable.DestructuredVariable({Type = t}) -> Ok t
 
 /// This function is a 2-in-1 because in order to get the return type,
 /// it must first verify that it, indeed, refers to a callable type

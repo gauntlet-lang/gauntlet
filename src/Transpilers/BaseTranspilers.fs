@@ -47,11 +47,7 @@ let transpileParameters (input:ResolvedAst.Parameter list) =
 
 let seperateVarsByCommas (input:ResolvedAst.ScopedVariable list) = 
     input
-    |> List.map (fun v ->
-        match v with
-        | ResolvedAst.ScopedVariable.ExprVariable(d) -> d.Name
-        | ResolvedAst.ScopedVariable.ParameterVariable(d) -> d.Name
-        | ResolvedAst.ScopedVariable.ZeroVariable(d) -> d.Name)
+    |> List.map (_.GetName())
     |> String.concat ", "
     
 

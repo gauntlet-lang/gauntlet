@@ -192,8 +192,7 @@ let mkASTData (ast: Ast.AST) : Ast.ASTData =
     let mutable (importedModuleIdentifiers: (ModuleName * IdentifierName) list) = []
     let mutable (aliases: Ast.AliasData list) = []
     let mutable (enums: Ast.EnumData list) = []
-    //let mutable (structReferences: StructReference list) = []
-    //let mutable (interfaceRefereces: InterfaceReference list) = []
+
 
     let mutable (methods: ( (* CustomTypeIdentifier *  *) Ast.MethodData) list) = []
 
@@ -203,22 +202,15 @@ let mkASTData (ast: Ast.AST) : Ast.ASTData =
     for astConstruct in ast do
         match astConstruct with
         | Ast.Const(data) ->
-            (* let (varData:Ast.IdentifierData) =
-                { VarName = name
-                  Type = getTypeFromConst consts constExpr
-                  ExportStatus = Exportable exportStatus } *)
+            
 
             consts <- Misc.listAdd consts data
         | Ast.ToplevelDeclaration.Function(data) -> functions <- Misc.listAdd functions data
         | Ast.ToplevelDeclaration.Enum(enum) ->
             enums <- Misc.listAdd enums enum 
         | Ast.ToplevelDeclaration.Struct(_, structName, _, constructs as data) -> structs <- Misc.listAdd structs data
-        (* for construct in constructs do
-                structFields <- Misc.listAdd structFields (structName, construct) *)
         | Ast.ToplevelDeclaration.Interface(_, interfaceName, _, constructs as data) ->
             interfaces <- Misc.listAdd interfaces data
-        (* for construct in constructs do
-                interfaceMethods <- Misc.listAdd interfaceMethods (interfaceName, construct) *)
         | Ast.Import(moduleName, moduleIdentifierName) ->
             importedModuleIdentifiers <- Misc.listAdd importedModuleIdentifiers (moduleName, moduleIdentifierName)
         | Ast.ToplevelDeclaration.Method(_, _, (receiverType, _), _, _ as methodData) ->

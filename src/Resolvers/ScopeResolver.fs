@@ -31,7 +31,7 @@ let rec tryResolveExpression
     | Ast.Expression.FunctionCall(data) -> tryResolveFunctionCall context data
     | Ast.Expression.Accessors(data) -> tryResolveAccessorsExpressionVersion context data
     | Ast.Expression.ArrayLiteral(data) -> tryResolveArrayLiteral context data
-    | Ast.Expression.EnumCaseLiteral(data) -> tryResolveEnumCaseLiteral context data
+    | Ast.Expression.EnumCaseLiteral(data) -> tryResolveExprEnumCaseLiteral context data
     | Ast.Expression.Boolean(data) -> tryResolveBoolean data
     | Ast.Expression.ChannelRecieve(data) -> tryResolveChannelReceive context data
     | Ast.Expression.DereferenceOf(data) -> tryResolveDereferenceOf scopeVariables data
@@ -71,8 +71,87 @@ let rec tryResolveExpression
         tryResolveUnaryOperator context data
     | Ast.Expression.Unit -> Ok ResolvedAst.Expression.Unit
     | Ast.Expression.Char(data) -> tryResolveChar data
+    | Ast.Expression.PatternMatch(data) -> tryResolvePatternMatch context data
 
-and tryResolveEnumCaseLiteral (context:ResolvedAst.Context) ((caseName, fields):Ast.EnumCaseLiteralData) = result {
+and tryResolveMatchingPattern (context:ResolvedAst.Context) (input:Ast.MatchingPattern) = 
+    match input with
+    (* | Ast.MatchingPattern.ArrayLiteral(length, t, exprs) -> result {
+        let! resolvedExprs =
+            exprs
+            |> List.map (tryResolveExpression context)
+            |> List.sequenceResultA
+            |> Result.mapError Misc.flattenList
+        let! resolvedType = tryResolveType context.AstData context.ScopeGenerics  t
+        return ResolvedAst.MatchingPattern.ArrayLiteral({
+            ItemsType = resolvedType
+            Length =length
+            Items = resolvedExprs }), []
+        } *)
+    | Ast.MatchingPattern.Boolean(b) ->
+        Ok (ResolvedAst.MatchingPattern.Boolean({Value = b}), [])
+    | Ast.MatchingPattern.Char(c) ->
+        Ok (ResolvedAst.MatchingPattern.Char(c), [])
+    | Ast.MatchingPattern.EnumCaseLiteral(data) -> result {
+        let! result, deconstructedVars = 
+            tryResolvePatternEnumCaseLiteral context data
+        return (ResolvedAst.MatchingPattern.EnumCaseLiteral result), deconstructedVars
+        }
+       
+    | Ast.MatchingPattern.Float(isNegative, f, isImaginary) ->
+        Ok (ResolvedAst.MatchingPattern.Float({ 
+            IsNegative = isNegative
+            Float = f
+            IsImaginary = isImaginary }), [])
+    | Ast.MatchingPattern.Destructure(ident) ->
+        Ok (ResolvedAst.MatchingPattern.Destructure(ident), [])
+    | Ast.MatchingPattern.Number(isNegative, s, numProp') ->
+        Ok (ResolvedAst.MatchingPattern.Number({
+            IsNegative = isNegative
+            StringRepresentation = s
+            Property = numProp'
+        }), [])
+    (* | Ast.MatchingPattern.SliceLiteral(t, exprs) -> result {
+        let! resolvedType = tryResolveType context.AstData context.ScopeGenerics t
+        let! resolvedExprs = 
+            exprs
+            |> List.map (tryResolveExpression context)
+            |> List.sequenceResultA
+            |> Result.mapError Misc.flattenList
+        
+        return ResolvedAst.MatchingPattern.SliceLiteral({
+            SliceItemsType = resolvedType
+            Items = resolvedExprs
+        }), []
+        } *)
+    | Ast.MatchingPattern.String(s) ->
+        Ok (ResolvedAst.MatchingPattern.String(s), [])
+        
+
+and tryResolvePatternMatch (context:ResolvedAst.Context) ((expr, cases):Ast.PatternMatchData) = result {
+    let! resolvedExpr = tryResolveExpression context expr
+    //let! resolvedType = tryResolveType context.AstData context.ScopeGenerics rt
+    let! resolvedCases = 
+        cases
+        |> List.map(fun (pattern, scopeContent) -> result {
+            
+            let! resolvedPattern, newVariables = tryResolveMatchingPattern context pattern
+            
+            context.ScopeVariables.StoreVariables(newVariables)
+            // generics here
+            let! resolvedScope, _ = tryResolveScope context [] [] [] scopeContent
+            return {|Pattern = resolvedPattern; Scope = resolvedScope|}
+        })
+        |> List.sequenceResultA
+        |> Result.mapError Misc.flattenList
+
+    return (({
+        MatchExpr = resolvedExpr
+        Cases = resolvedCases
+//        Type = resolvedType
+    }):ResolvedAst.PatternMatchData) |> ResolvedAst.Expression.PatternMatch
+}
+
+and tryResolveExprEnumCaseLiteral (context:ResolvedAst.Context) ((caseName, fields):Ast.ExprEnumCaseLiteralData) = result {
     let! caseId =
         context.ResolvedDeclarations.Enums
         |> Map.tryPick (fun _ enumData ->
@@ -98,6 +177,49 @@ and tryResolveEnumCaseLiteral (context:ResolvedAst.Context) ((caseName, fields):
     })
 
 } 
+
+and tryResolvePatternEnumCaseLiteral (context:ResolvedAst.Context) ((caseName, fields):Ast.PatternEnumCaseLiteralData) = result {
+    let! caseData =
+        context.ResolvedDeclarations.Enums
+        |> Map.tryPick (fun _ enumData ->
+            enumData.Cases
+            |> List.tryFind(fun case -> case.Name = caseName)
+        )
+        |> Result.requireSome [$"Enum case {caseName} does not exist"]
+    
+    let mutable deconstructedVariables = []
+
+    let! resolvedFields =
+        fields
+        |> List.map (fun (name, matchingPattern) -> result {
+            // Extract the variable and add them to the 
+            // previous variables, if any
+            let fieldData =
+                caseData.Fields
+                |> List.tryFind(fun x -> x.Name = name)
+                |> Misc.failIfNone $"Case '{caseName}' has no field '{name}' to destructure"
+            let newlydDeconstructedVariables = 
+                match matchingPattern with
+                | Ast.MatchingPattern.Destructure(ident) ->
+                    [createDestructuredVariable ident fieldData.Type]
+                | _ -> []
+            let! e, previouslyDeconstructuredVars = tryResolveMatchingPattern context matchingPattern
+            let allDeconstructedVariables = List.append previouslyDeconstructuredVars newlydDeconstructedVariables
+            deconstructedVariables <- Misc.listAdd deconstructedVariables allDeconstructedVariables
+            return {|Name = name; Value = e|}
+            })
+        |> List.sequenceResultA
+        |> Result.mapError Misc.flattenList
+
+
+    return ({
+        Name = caseName
+        Fields = resolvedFields
+        CaseId = caseData.Id
+    }:ResolvedAst.PatternEnumCaseLiteralData), (List.distinct << Misc.flattenList) deconstructedVariables
+
+} 
+
 
 //and tryResolveIota () = Ok <| ResolvedAst.Iota
 and tryResolveConstantIdentifier (context:ResolvedAst.Context) (identifier:Ast.ConstantIdentifierData) = result {
@@ -470,16 +592,7 @@ and tryResolvePipeOperators (context:ResolvedAst.Context) ((expr, pipes):Ast.Pip
             | Ast.PipeCall.FunctionCall(possibleFunctionReference, genericsInstantiationData', arguments) -> result {
                 let! resolvedOptionalGenericsInstantiation = Misc.applyResultToOption (tryResolveGenericsInstantiation context.AstData context.ScopeGenerics) genericsInstantiationData'
 
-                (* let numberOfUnderscoreParameters = 
-                    arguments
-                    |> List.filter (fun (arg, _) ->
-                        match arg with
-                        | Ast.PipeFunctionCallArgument.Normal(_) -> false
-                        | Ast.PipeFunctionCallArgument.Placeholder -> true)
-                        |> _.Length
-
-                do! Result.requireTrue ["When using pipe operator, functions cannot have more than one underscore as a parameter"] (numberOfUnderscoreParameters = 1) *)
-                
+                                
                 let! mappedArguments = 
                     arguments
                     |> List.map(fun (arg, hasEllipsis) ->
@@ -689,24 +802,7 @@ and tryResolveLambda (context:ResolvedAst.Context) ((parameters, returnType, raw
         })
 }
 
-(* and tryResolveIndex (context:ResolvedAst.Context) ((indexableRef, indexNumber): Ast.IndexData) = 
-    result {
-        let convertedExpression = 
-            match indexableRef with
-            | Ast.IndexableReference.Identifier(name) -> Ast.Expression.Identifier(name)
-            | Ast.IndexableReference.Parentheses(expr) -> Ast.Expression.Parentheses(expr)
-            | Ast.IndexableReference.ArrayLiteral(data) -> Ast.Expression.ArrayLiteral(data)
-            | Ast.IndexableReference.SliceLiteral(data) -> Ast.Expression.SliceLiteral(data)
-            | Ast.IndexableReference.String(data) -> Ast.Expression.String data
-            | Ast.IndexableReference.MapLiteral(data) -> Ast.Expression.MapLiteral(data)
-            | Ast.IndexableReference.PointerTo(data) -> Ast.Expression.PointerTo(data)
-        let! resolvedExpr = tryResolveExpression context convertedExpression
-        return ResolvedAst.Expression.Index({
-            Reference = resolvedExpr
-            Position = indexNumber
-        })
-    }
- *)
+
 and tryResolveIdentifier (context:ResolvedAst.Context) (variableName:string) =
     let possibleVariable =
         context.ScopeVariables.TryFindVariable(variableName)
@@ -788,14 +884,6 @@ and tryGetAccessorSupportedType (input:ResolvedAst.ResolvedType) =
         Ok (ResolvedAst.AccessorSupportedType.StructType typeData)
     | ResolvedAst.ResolvedType.InterfaceType(typeData) ->
         Ok (ResolvedAst.AccessorSupportedType.InterfaceType typeData)
-    (* | ResolvedAst.ResolvedType.DerivedFromModuleType(data) ->
-        Ok (ResolvedAst.AccessorSupportedType.DerivedFromModuleType data) *)
-    (* | ResolvedAst.ResolvedType.ModuleType(moduleName) ->
-        // This is technically not correct since the module 
-        // type is not the same as "derived" from module type.
-        // However, it's much easier to do this "fake it till you make it", esp since, in the future
-        // I plan to actually support module types
-        Ok (ResolvedAst.AccessorSupportedType.DerivedFromModuleType({AttributeName = moduleName})) *)
     | _ ->
         Error [$"Type '{Ast.transpileType input}' does not support attributes"]
 
@@ -807,8 +895,7 @@ and getAccessorSupportedTypeName (input:ResolvedAst.AccessorSupportedType) =
         typeData.StructName
     | ResolvedAst.AccessorSupportedType.InterfaceType(typeData) ->
         typeData.InterfaceName
-(*     | ResolvedAst.AccessorSupportedType.DerivedFromModuleType({AttributeName = name}) ->
-        $"Unknown (type comes from '{name}' method or attribute)" *)
+
 
 
 and tryResolveIndividualExprArgAccessors (context:ResolvedAst.Context) ((baseExpression, accessors):Ast.ExprArgsAccessorsData):Result<ResolvedAst.AccessorItemExprArgs list, string list> = result {
@@ -1120,6 +1207,10 @@ and createParameterVariable (name:string) (hasEllipsis:bool) (t:ResolvedAst.Reso
     ({Name = name; Type = t; HasEllipsis = hasEllipsis}:ResolvedAst.ParameterVariableData)
     |> ResolvedAst.ParameterVariable
 
+and createDestructuredVariable (name:string) (t:ResolvedAst.ResolvedType) = 
+    ({Name = name; Type = t}:ResolvedAst.DestructuredVariableData)
+    |> ResolvedAst.DestructuredVariable
+
 and tryResolveStatement (context:ResolvedAst.Context) (input:Ast.Statement) =
     match input with
     | Ast.Statement.Continue -> tryResolveContinue ()
@@ -1414,72 +1505,3 @@ and tryResolveScope
     }
     
 
-(* and resolveAccessorItemArguments<'T, 'N> (context:ResolvedAst.Context) (argMapper: 'T -> Result<'N, string list>) (accessors:ResolvedAst.AccessorItem<'T> list): Result<ResolvedAst.AccessorItemExprArgs,string list> list = 
-    
-    accessors
-    |> List.map (fun accessor ->
-        match accessor with
-        (* | ResolvedAst.AccessorItem.ItemDerivedFromModule(Name = name; CallData = Some callData) -> result {
-            let! mappedFunctionArguments = 
-                callData.FunctionArguments
-                |> List.map (fun arg ->
-                    argMapper arg.Argument
-                    |> Result.map (fun r -> {|Argument = r; HasEllipsis = arg.HasEllipsis|}))
-                |> List.sequenceResultA
-                |> Result.mapError Misc.flattenList
-            return ResolvedAst.AccessorItem.ItemDerivedFromModule(Name = name, CallData = Some {GenericsInstantiation = callData.GenericsInstantiation; FunctionArguments = mappedFunctionArguments})
-            }
-        | ResolvedAst.AccessorItem.ItemDerivedFromModule(Name = name; CallData = None) ->
-            Ok <| ResolvedAst.AccessorItem.ItemDerivedFromModule(Name = name, CallData = None) *)
-        | ResolvedAst.AccessorItem.Method(Declaration = declaration; CallData = Some callData) -> result {
-            let! mappedFunctionArguments = 
-                callData.FunctionArguments
-                |> List.map (fun arg ->
-                    argMapper arg.Argument
-                    |> Result.map (fun r -> {|Argument = r; HasEllipsis = arg.HasEllipsis|}))
-                |> List.sequenceResultA
-                |> Result.mapError Misc.flattenList
-
-
-            return ResolvedAst.AccessorItem.Method(Declaration = declaration, CallData = Some {GenericsInstantiation = callData.GenericsInstantiation; FunctionArguments = mappedFunctionArguments})
-            }
-            
-        | ResolvedAst.AccessorItem.InterfaceMethod(Declaration = declaration; CallData = None) ->
-            ResolvedAst.AccessorItem.InterfaceMethod(Declaration = declaration, CallData = None)
-            |> Ok
-        | ResolvedAst.AccessorItem.StructField(Declaration = declaration; CallData = None) ->
-            ResolvedAst.AccessorItem.StructField(Declaration = declaration, CallData = None)
-            |> Ok
-        | ResolvedAst.AccessorItem.StructField(Declaration = declaration; CallData = Some callData) as d -> result {
-            let! mappedFunctionArguments = 
-                callData.FunctionArguments
-                |> List.map (fun arg ->
-                    argMapper arg.Argument
-                    |> Result.map(fun r -> {|Argument = r; HasEllipsis = arg.HasEllipsis|}))
-                |> List.sequenceResultA
-                |> Result.mapError Misc.flattenList
-            return ResolvedAst.AccessorItem.StructField(Declaration = declaration, CallData = Some {GenericsInstantiation = callData.GenericsInstantiation; FunctionArguments = mappedFunctionArguments})
-            }
-            
-        | ResolvedAst.AccessorItem.InterfaceMethod(Declaration = declaration; CallData = Some callData) -> result {
-            let! mappedFunctionArguments = 
-                callData.FunctionArguments
-                |> List.map (fun arg ->
-                    argMapper arg.Argument
-                    |> Result.map(fun r -> {|Argument = r; HasEllipsis = arg.HasEllipsis|}))
-                |> List.sequenceResultA
-                |> Result.mapError Misc.flattenList
-            return ResolvedAst.AccessorItem.InterfaceMethod(Declaration = declaration, CallData = Some {GenericsInstantiation = callData.GenericsInstantiation; FunctionArguments = mappedFunctionArguments})
-            }
-            
-        | ResolvedAst.AccessorItem.StructDeclaration({ GenericsInstantiation = genericsInstantiation; StructDeclaration = structDeclaration }) ->
-            ResolvedAst.AccessorItem.StructDeclaration({StructDeclaration = structDeclaration; GenericsInstantiation = genericsInstantiation})
-            |> Ok
-        | ResolvedAst.AccessorItem.Method(Declaration = declaration; CallData = None) ->
-            ResolvedAst.AccessorItem.Method(Declaration = declaration, CallData = None)
-            |> Ok
-        | ResolvedAst.AccessorItem.InterfaceDeclaration({InterfaceDeclaration = interfaceDeclaration; GenericsInstantiation = genericsInstantiation}) ->
-            ResolvedAst.AccessorItem.InterfaceDeclaration({InterfaceDeclaration = interfaceDeclaration; GenericsInstantiation = genericsInstantiation})
-            |> Ok
-    )
- *)

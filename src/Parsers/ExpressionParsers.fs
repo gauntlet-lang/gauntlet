@@ -46,11 +46,11 @@ let typeAssertion =
 
 let lambda =
     pipe4
-        (pstr "lambda" >>. spaces1 >>. typeParser .>> spaces)
+        (pstr "lambda" >.< spaces1)
         (pchar '(' >>. (sepBy functParam (pchar ',')))
-        (pchar ')' >>. spaces)
+        (pchar ')' >>. spaces >>. pchar ':' >>. spaces >>. typeParser .>> spaces)
         constructsBetweenBraces
-        (fun returnType parameters _ contents -> parameters, returnType, (contents, newRandomNumber ()))
+        (fun _ parameters returnType contents -> parameters, returnType, (contents, newRandomNumber ()))
     <??> "Lambda"
 
 let (mapLiteral: Parser<Ast.MapLiteralData>) =
@@ -137,7 +137,7 @@ let whenCase =
         (fun _ (expr, unresolvedType) _ (regularCases, defaultCase') _ -> Ast.Expression.When(expr, unresolvedType, regularCases, defaultCase'))
     <??> "When-case"
 let charParser = 
-    pchar ''' >>. anyChar .>> pchar ''' |>> Ast.Char 
+    pchar ''' >>. anyChar .>> pchar ''' 
 
 let (arrayLiteral: Parser<Ast.ArrayLiteralData>) =
     let lengthParser =
@@ -189,45 +189,62 @@ let constantIdentifier = screamingSnakeCase |>> Ast.Expression.ConstantIdentifie
 let expressionParentheses = 
     betweenParentheses expressionParser |>> Ast.Expression.Parentheses
 
-let enumCaseLiteral = 
+let enumCaseLiteral fieldValueParser = 
     let fieldParser = 
         pipe3
             (camelCase .>> spaces)
             (pchar ':' >.< spaces)
-            (expressionParser) 
+            (fieldValueParser) 
             (fun fieldName _ value -> fieldName, value)
     pipe4
         (pascalCase .>> spaces)
         (pchar '(' >.< spaces)
         (sepBy fieldParser (pchar ',' >.< spaces))
         (pchar ')')
-        (fun caseName _ fields _ -> Ast.Expression.EnumCaseLiteral(caseName, fields))
+        (fun caseName _ fields _ -> caseName, fields)
 
-(* let patternMatch =
+
+let patternMatch = 
     
-    let rec patternParser =
-        pipe3
-            (camelCase .>> spaces .>> pchar '(' .>> spaces)
-            // Thinking: allow `let` in front of every `expr` and
-            // check at resolution time if it's a variable
-            (patternParser)
+    let patternParser, ref = createParserForwardedToRef ()
+    ref.Value <-
+        choice [
+            number |>> Ast.MatchingPattern.Number
+            float |>> Ast.MatchingPattern.Float
+            str |>> Ast.MatchingPattern.String
+            booleanParser |>> Ast.MatchingPattern.Boolean
+            charParser |>> Ast.MatchingPattern.Char
+            (pstr "let" >>. spaces1 >>. identifier) |>> Ast.MatchingPattern.Destructure
+            //arrayLiteral |>> Ast.MatchingPattern.ArrayLiteral
+            //sliceLiteral |>> Ast.MatchingPattern.SliceLiteral
+            enumCaseLiteral patternParser |>> Ast.MatchingPattern.EnumCaseLiteral
+        ]
 
 
-    let caseParser = 
-        pstr "case" >>. spaces1 >>. failwith "pattern parser here" 
-    pipe4
-        (pstr "match" >.< spaces1 >>. expressionParser .>> pchar '{' .>> sep)
-        () 
- *)
+    let caseParser =
+        pipe2
+            (pstr "case" >>. spaces1 >>. patternParser .>> spaces)
+            (pchar ':' >.< spaces)
+            (fun pat _ -> pat)
+
+    
+    pipe3
+        (pstr "match" >>. spaces1 >>. expressionParser .>> (* spaces1 .>> pchar '@' .>> *) spaces)
+        ((* typeParser .>> *) spaces .>> pchar '{' .>> sep)
+        (sepByNewLines (caseParser .>>. constructsBetweenBraces) .>> sep .>> pchar '}')
+        (fun e _ cases -> Ast.Expression.PatternMatch(e, List.map (fun (pat, scope) -> pat, (scope, newRandomNumber ())) cases))
+
+
+
 expressionParsers <-
     [ (* (attempt (typeNameWithGenericsInstantiationData compositeLiteral)
        |>> Ast.CompositeLiteral),
       "compositeLiteral" *)
       mapLiteral |>> Ast.Expression.MapLiteral, "mapLiteral"
-      charParser, "charParser"
+      charParser |>> Ast.Char, "charParser"
       attempt ternaryOperator, "ternaryOperator"
       attempt makeFunction, "makeFunction"
-      attempt enumCaseLiteral, "enumCaseLiteral"
+      attempt (enumCaseLiteral expressionParser) |>> Ast.Expression.EnumCaseLiteral, "enumCaseLiteral"
       attempt newFunction, "newFunction"
       attempt typeAssertion, "typeAssertion"
       attempt typeConversion, "typeConversion"
@@ -244,13 +261,13 @@ expressionParsers <-
       attempt tuple, "tuple"
       expressionParentheses, "parentheses"
       str |>> Ast.Expression.String, "str"
-      attempt negativeInteger |>> Ast.Expression.Number, "negativeInteger"
-      attempt positiveInteger |>> Ast.Expression.Number, "positiveInteger"
+      attempt number |>> Ast.Expression.Number, "number"
       float |>> Ast.Expression.Float, "float"
       dereferenceOf, "dereferenceOf"
       pointerTo |>> Ast.Expression.PointerTo, "pointerTo"
       channelRecieve, "channelReceive"
       whenCase, "whenCase"
+      patternMatch, "patternMatch"
       (attempt (typeNameWithGenericsInstantiationData structLiteral)
        |>> Ast.Expression.StructLiteral),
       "structLiteral"
@@ -384,8 +401,6 @@ expressionParsers <- List.append [ attempt unaryOperator, "unaryOperator" ] expr
 expressionParsers <- List.append [ attempt pipeOperator, "pipeOperator" ] expressionParsers
 
 expressionParsers <- List.append [ attempt operatorSequence, "operatorSequence" ] expressionParsers
-
-// expressionParsers |> List.iter (fun (x, y) -> printfn $"{y}")
 
 let initializeExpressionParser () =
     expressionParserRef.Value <- choice <| List.map fst expressionParsers
