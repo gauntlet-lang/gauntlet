@@ -28,18 +28,18 @@ import "strconv" as strconv
 
 
 // Explicit export keyword
-export fun ([]String, Error) getTrimmedFileLines(String fileName) {
+export fun getTrimmedFileLines(fileName: String): ([]String, Error) {
   // try-with syntax replaces verbose `err != nil` error handling
   let fileContent, err = try os.readFile(fileName) with (null, err)
   
-  let fileContentStrVersion = (String)(fileContent) // Type conversion
+  // Type conversion
+  let fileContentStrVersion = (String)(fileContent) 
 
   let trimmedLines = 
     // Pipes feed output of last function into next one
     fileContentStrVersion
-    => strings.trimSpace(_)
-    => strings.split(_, "\n")
-    
+    |> strings.trimSpace(_)
+    |> strings.split(_, "\n")
 
   // `nil` is equal to `null` in Gauntlet
   return (trimmedLines, null)
@@ -47,8 +47,9 @@ export fun ([]String, Error) getTrimmedFileLines(String fileName) {
 }
 
 
-fun Unit main() {
-  let a = 1 // No unused variable errors
+fun main(): Unit {
+  // No 'unused variable' errors
+  let a = 1 
 
   // force-with syntax will panic if err != nil
   let lines, err = force getTrimmedFileLines("example.txt") with err
@@ -56,7 +57,7 @@ fun Unit main() {
   // Ternary operator
   let properWord = @String len(lines) > 1 ? "lines" : "line"
 
-  let stringLength = lines => len(_) => strconv.itoa(_)
+  let stringLength = lines |> len(_) |> strconv.itoa(_)
 
   fmt.println("There are " + stringLength + " " + properWord + ".")
   fmt.println("Here they are:")
@@ -68,4 +69,5 @@ fun Unit main() {
   }
 
 }
+
 ```
