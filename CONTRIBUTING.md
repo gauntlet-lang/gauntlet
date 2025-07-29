@@ -53,4 +53,4 @@ If you find a bug, please help us out by reporting it!
 
 ## 🤝 Code of Conduct
 
-The aim is to build a welcoming and inclusive community. Please review our [Code of Conduct](CODE_OF_COND   UCT.md) before contributing to ensure we all work together respectfully.
+The aim is to build a welcoming and inclusive community. Please review our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing to ensure we all work together respectfully.
