@@ -1,3 +1,6 @@
+# Status Update: December 30th,2025
+Gauntlet has not been abandoned; is being re-written in order to improve maintainability and introduce feautures that will best serve the Golang community. 
+
 # What's Gauntlet?
 
 Gauntlet is a programming language designed to address many of Golang’s shortcomings. It transpiles exclusively to Go code, fully supports all of its features, and integrates seamlessly with its entire ecosystem — without the need for bindings.
